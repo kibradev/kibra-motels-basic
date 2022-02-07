@@ -1,16 +1,4 @@
-exports.ghmattimysql:ready(function()
-    local MotelData = exports.ghmattimysql:executeSync('SELECT * FROM kibra_motels')
-    for MotelDataInfo = 1, #MotelData, 1 do
-        local MotelRooms = json.decode(MotelData[MotelDataInfo].room_data)
-        local MotelId = MotelData[MotelDataInfo].motelid
-        local MotelRoomNo = MotelData[MotelDataInfo].room_no
-        KIBRA.Motels[MotelId].MotelRooms[MotelRoomNo].Owner = MotelData[MotelDataInfo].room_owner
-        KIBRA.Motels[MotelId].MotelRooms[MotelRoomNo].DoorLock = MotelRooms.door.lock
-        KIBRA.Motels[MotelId].MotelRooms[MotelRoomNo].StashLock = MotelRooms.stash.lock
-        KIBRA.Motels[MotelId].MotelRooms[MotelRoomNo].KeyInfo = MotelData[MotelDataInfo].roomkeydata
-    end
-    print("^2[Kibra-Motels] - ^7Motel Verileri Yuklendi")
-end)
+local QBCore = exports['qb-core']:GetCoreObject()
 
 QBCore.Functions.CreateUseableItem("motelkeys" , function(source, item)   
     local src = source
@@ -26,15 +14,15 @@ RegisterNetEvent('kibra-motels:server:BuyMotel', function(MotelRoomId, Price, Mo
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     local PlayerMoney = Player.PlayerData.money["cash"]
+    local PlayerName = Player.PlayerData.charinfo.firstname..' '..Player.PlayerData.charinfo.lastname
+    local MotelsNo, RoomsNo = QBCore.Shared.KeyDataMotel(MotelRoomId)
     local RandomKeyData = 'KBR'..math.random(111111,999999)
     if PlayerMoney >= Price then
-        local DataX = exports.ghmattimysql:executeSync('SELECT bought FROM kibra_motels WHERE id = @RoomIdd', { ['@RoomIdd'] = MotelRoomId })
+        local DataX = exports.oxmysql:executeSync('SELECT bought FROM kibra_motels WHERE room_no = @RoomIdd', { ['@RoomIdd'] = MotelRoomId })
         if #DataX > 0 then
             if DataX[1].bought == 0 then
                 Player.Functions.RemoveMoney('cash', Price)
-                KIBRA.Motels[MotelNo].MotelRooms[MotelRoomId].Owner = Player.PlayerData.citizenid
-                KIBRA.Motels[MotelNo].MotelRooms[MotelRoomId].KeyInfo = RandomKeyData
-                exports.ghmattimysql:execute('UPDATE kibra_motels set room_owner = @RoomOwner, roomkeydata = @RoomKeyData, motelid = @MotelId, bought = @RoomBought WHERE room_no = @RoomId', {
+                exports.oxmysql:execute('UPDATE kibra_motels set room_owner = @RoomOwner, roomkeydata = @RoomKeyData, motelid = @MotelId, bought = @RoomBought WHERE room_no = @RoomId', {
                     ['@RoomOwner'] = Player.PlayerData.citizenid,
                     ['@RoomKeyData'] = RandomKeyData,
                     ['@RoomId'] = MotelRoomId,
@@ -45,10 +33,12 @@ RegisterNetEvent('kibra-motels:server:BuyMotel', function(MotelRoomId, Price, Mo
                     MotelId = MotelRoomId,
                     MotelName = KIBRA.Motels[MotelNo].MotelName,
                     RoomKeyData = RandomKeyData,
-                    MotelNo = MotelNo
+                    MotelNo = MotelNo,
+                    MotelFakeRoomNo = RoomsNo
                 }
                 Player.Functions.AddItem("motelkeys", 1, nil, info)
                 TriggerClientEvent('QBCore:Notify', src, 'Başarıyla bir motel odası kiraladınız!', 'success')
+                SendDiscordLog(src, "Motel Odası Satın Aldı! "..PlayerName, "**Citizen ID:**"..Player.PlayerData.citizenid..'\n **License ID: **'..Player.PlayerData.license..'\n **Oda Numarası: **'..MotelRoomId..'\n **Motel:** '..KIBRA.Motels[MotelNo].MotelName..' \n **Ödenilen Oda Ücreti: **: '..Price)
             else 
                 TriggerClientEvent('QBCore:Notify', src, 'Bu motel odası başkasına ait!', 'error')
             end
@@ -61,21 +51,26 @@ end)
 RegisterNetEvent('kibra-motels:server:LeaveMotel', function(MotelNo, MotelRoomId)
     local Player = QBCore.Functions.GetPlayer(source)
     local xItem = Player.Functions.GetItemByName("motelkeys")
-    if xItem.amount >= 1 and xItem ~= nil then
-        if xItem.info.MotelId == MotelRoomId then
-            exports.ghmattimysql:execute('UPDATE kibra_motels set room_owner = @RoomOwner, roomkeydata = @RoomKeyData, motelid = @MotelId, bought = @RoomBought WHERE room_no = @RoomId', {
-                ['@RoomOwner'] = nil,
-                ['@RoomKeyData'] = nil,
-                ["@MotelId"] = nil,
-                ["@RoomBought"] = 0,
-                ["@RoomId"] = MotelRoomId
-            })
-            KIBRA.Motels[MotelNo].MotelRooms[MotelRoomId].Owner = nil
-            KIBRA.Motels[MotelNo].MotelRooms[MotelRoomId].KeyInfo = nil
-            Player.Functions.RemoveItem(xItem.name, 1, nil)
-            TriggerClientEvent('QBCore:Notify', source, 'Motel odanızı başarıyla iptal ettiniz!', 'success')
+    local MotelOp, MotelRid = QBCore.Shared.KeyDataMotel(MotelRoomId)
+    local PlayerName = Player.PlayerData.charinfo.firstname..' '..Player.PlayerData.charinfo.lastname
+    if xItem ~= nil then
+        if xItem.amount >= 1 then
+            if xItem.info.MotelId == MotelOp..'_'..MotelRid then
+                exports.oxmysql:execute('UPDATE kibra_motels set room_owner = @RoomOwner, roomkeydata = @RoomKeyData, motelid = @MotelId, bought = @RoomBought WHERE room_no = @RoomId', {
+                    ['@RoomOwner'] = nil,
+                    ['@RoomKeyData'] = nil,
+                    ["@MotelId"] = nil,
+                    ["@RoomBought"] = 0,
+                    ["@RoomId"] = xItem.info.MotelId
+                })
+                Player.Functions.RemoveItem(xItem.name, xItem.amount, nil)
+                TriggerClientEvent('QBCore:Notify', source, 'Motel odanızı başarıyla iptal ettiniz!', 'success')
+                SendDiscordLog(source, "MOTEL ODASINI İPTAL ETTİ "..PlayerName, "**Citizen ID:**"..Player.PlayerData.citizenid..'\n **License ID: **'..Player.PlayerData.license..'\n **Oda Numarası: **'..MotelRoomId..'\n **Motel:** '..KIBRA.Motels[MotelOp].MotelName)
+            else
+                TriggerClientEvent('QBCore:Notify', source, 'Bu Motel anahtarı odanıza ait değil!', 'error')
+            end
         else
-            TriggerClientEvent('QBCore:Notify', source, 'Motel anahtarı odanıza ait değil!', 'error')
+            TriggerClientEvent('QBCore:Notify', source, 'Motal odanızı iptal edebilmeniz için motel anahtarına ihtiyacınız var!', 'error')
         end
     else
         TriggerClientEvent('QBCore:Notify', source, 'Motal odanızı iptal edebilmeniz için motel anahtarına ihtiyacınız var!', 'error')
@@ -92,16 +87,6 @@ RegisterNetEvent('kibra-motels:server:MotelDoorLock', function(MotelNo, MotelRoo
     end
 end)
 
-RegisterNetEvent('kibra-motels:server:DepoLockBuy', function()
-    local Player = QBCore.Functions.GetPlayer(source) 
-    local xMoney = Player.PlayerData.money["cash"]
-    if xMoney == KIBRA.StashLockPrice then
-        Player.Functions.AddItem("depolock", 1)
-    else
-        TriggerClientEvent('QBCore:Notify', source, 'Depo Kilidi alacak kadar paranız yok!', 'error')
-    end
-end)
-
 RegisterNetEvent('kibra-motels:server:MotelStashLock', function(MotelNo, MotelRoomId, State)
     KIBRA.Motels[MotelNo].MotelRooms[MotelRoomId].StashLock = State
     TriggerClientEvent('kibra-motels:client:MotelStashLockOpen', -1, MotelNo, MotelRoomId, State)
@@ -113,8 +98,10 @@ RegisterNetEvent('kibra-motels:server:MotelStashLock', function(MotelNo, MotelRo
 end)
 
 RegisterNetEvent('kibra-motels:server:CopyKey', function(MotelRoomId, MotelName, KeyData)
-    local Player = QBCore.Functions.GetPlayer(source)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
     local PlayerMoney = Player.PlayerData.money["cash"]
+    local PlayerName = Player.PlayerData.charinfo.firstname..' '..Player.PlayerData.charinfo.lastname
     local MotelKeyItem = Player.Functions.GetItemByName("motelkeys")
     if MotelKeyItem == nil or MotelKeyItem.amount <= KIBRA.CopyKeyLimit then
         if PlayerMoney >= KIBRA.CopyKeyPrice then
@@ -122,57 +109,97 @@ RegisterNetEvent('kibra-motels:server:CopyKey', function(MotelRoomId, MotelName,
                 MotelId = MotelRoomId,
                 MotelName = KIBRA.Motels[MotelName].MotelName,
                 RoomKeyData = KeyData,
-                MotelNo = MotelName
+                MotelNo = MotelName,
+                MotelFakeRoomNo = string.sub(MotelRoomId, 3)
             } 
             Player.Functions.AddItem("motelkeys", 1, nil, info)
-            TriggerClientEvent('QBCore:Notify', source, 'Başarıyla Yedek Anahtar çıkarttınız!', 'success')
+            Player.Functions.RemoveMoney('cash', KIBRA.CopyKeyPrice)
+            SendDiscordLog(src, "MOTEL ANAHTARI ÇIKARTTI "..PlayerName, "**Citizen ID:**"..Player.PlayerData.citizenid..'\n **License ID: **'..Player.PlayerData.license..'\n **Oda Numarası: **'..MotelRoomId..'\n **Ödediği Ücret:** '..KIBRA.CopyKeyPrice)
+            TriggerClientEvent('QBCore:Notify', src, 'Başarıyla Yedek Anahtar çıkarttınız!', 'success')
         else
-            TriggerClientEvent('QBCore:Notify', source, 'Yedek Anahtar çıkaracak kadar paranız yok!', 'error')
+            TriggerClientEvent('QBCore:Notify', src, 'Yedek Anahtar çıkaracak kadar paranız yok!', 'error')
         end
     else
-        TriggerClientEvent('QBCore:Notify', source, 'Maksimum sayıda Yedek Anahtar çıkarttınız!', 'error')
+        TriggerClientEvent('QBCore:Notify', src, 'Maksimum sayıda Yedek Anahtar çıkarttınız!', 'error')
     end
 end)
 
 QBCore.Functions.CreateCallback('kibra-motels:server:MotelCheck', function(source, cb)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    local PlayerMotel = exports.ghmattimysql:executeSync('SELECT * FROM kibra_motels', {})
-    for k,v in pairs(PlayerMotel) do
-        if v.room_owner == Player.PlayerData.citizenid then
+    local Player = QBCore.Functions.GetPlayer(source)
+     exports.oxmysql:execute('SELECT bought FROM kibra_motels WHERE room_owner = @RoomOwner', { ['@RoomOwner'] = Player.PlayerData.citizenid }, function(result)
+        if #result > 0 then
             cb(true)
         else
-            cb(false) 
+            cb(false)
         end
-    end
+    end)
 end)
 
 QBCore.Functions.CreateCallback('kibra-motels:server:MotelInfo', function(source, cb)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    local PlayerMotel = exports.ghmattimysql:executeSync('SELECT * FROM kibra_motels WHERE room_owner = @RoomOwner', {
+    local PlayerMotel = exports.oxmysql:executeSync('SELECT * FROM kibra_motels WHERE room_owner = @RoomOwner', {
         ["@RoomOwner"] = Player.PlayerData.citizenid
     })
     cb(PlayerMotel)
 end)
 
-
-AddEventHandler('onResourceStarting', function(resourceName)
-    if (GetCurrentResourceName() ~= resourceName) then
-      return
-    end
-    local MotelData = exports.ghmattimysql:executeSync('SELECT * FROM kibra_motels')
-    for MotelDataInfo = 1, #MotelData, 1 do
-        local MotelRooms = json.decode(MotelData[MotelDataInfo].room_data)
-        local MotelId = MotelData[MotelDataInfo].motelid
-        local MotelRoomNo = MotelData[MotelDataInfo].room_no
-        KIBRA.Motels[MotelId].MotelRooms[MotelRoomNo].Owner = MotelData[MotelDataInfo].room_owner
-        KIBRA.Motels[MotelId].MotelRooms[MotelRoomNo].DoorLock = MotelRooms.door.lock
-        KIBRA.Motels[MotelId].MotelRooms[MotelRoomNo].StashLock = MotelRooms.stash.lock
-        KIBRA.Motels[MotelId].MotelRooms[MotelRoomNo].KeyInfo = MotelData[MotelDataInfo].roomkeydata
-    end
-    print("^2[Kibra-Motels] - ^7Motel Verileri Yuklendi")
+QBCore.Functions.CreateCallback('kibra-motels:server:MotelIsBought', function(source, cb)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    local PlayerMotel = exports.oxmysql:executeSync('SELECT bought FROM kibra_motels WHERE room_no = @RoomBought', {
+        ["@RoomOwner"] = Player.PlayerData.citizenid
+    })
+    cb(PlayerMotel)
 end)
-  
-  
+
+function SendDiscordLog(source, title, message)
+    for k, v in ipairs(GetPlayerIdentifiers(source)) do
+        if string.match(v, 'discord:') then
+            identifierDiscord = v
+        end
+    end
+    local webHook = KIBRA.DiscordWebHookLink
+    local embedData = {
+        {
+            ["title"] = title,
+            ["color"] = 25087,
+            ["footer"] = {
+                ["text"] = os.date("%c"),
+            },
+            ["description"] = message..'\n **Discord:** <@'..string.sub(identifierDiscord, 9)..'>',
+            ["author"] = {
+            ["name"] = 'Kibra Motels Log',
+            ["icon_url"] = "https://cdn.discordapp.com/attachments/914508952891424808/914509397890301962/62299912.png",
+                },
+        }
+    }
+    if KIBRA.DiscordWebHook then
+        PerformHttpRequest(webHook, function(err, text, headers) end, 'POST', json.encode({ username = "Kibra Motels Log",embeds = embedData}), { ['Content-Type'] = 'application/json' })
+        Citizen.Wait(100)
+    end
+end
+
+TriggerEvent('cron:runAt', 18, 00, MotelBilling)
+
+function MotelBilling() 
+     exports.oxmysql:execute('SELECT * FROM kibra_motels WHERE bought = 1', {}, function(result)
+        if #result > 0 then
+            for k,v in ipairs(result) do
+                local MotelPlayerInfo = result[k]
+                local PlayerCitizenId = QBCore.Functions.GetPlayerByCitizenId(MotelPlayerInfo['room_owner'])
+                if KIBRA.Motels[MotelPlayerInfo["motelid"]].MotelRentPayment then
+                    TriggerEvent('esx_billing:sendBillAmaOffline', PlayerCitizenId.PlayerData.citizenid, KIBRA.Motels[MotelPlayerInfo["motelid"]].MotelName, "Motel Kirası", KIBRA.Motels[MotelPlayerInfo["motelid"]].MotelRentPrice)
+                end
+                if KIBRA.MailBilling then
+                    TriggerEvent('qb-phone:server:sendNewMailToOffline', PlayerCitizenId.PlayerData.citizenid, {
+                        sender = KIBRA.Motels[MotelPlayerInfo["motelid"]].MotelName,
+                        subject = "Motel Yönetimi",
+                        message = "Merhaba "..PlayerCitizenId.PlayerData.charinfo.firstname..' '..PlayerCitizenId.PlayerData.charinfo.lastname..' Otelimiz tarafından oda kirası fatura olarak bankanıza yansıtılmıştır. Geciktirmemeniz dileğiyle :)'
+                    })
+                end
+             end
+        end
+    end)
+end
 
