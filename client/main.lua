@@ -1,32 +1,73 @@
+local QBCore = exports['qb-core']:GetCoreObject()
+
 local MotelsBlip = false
 local MotelBlips = {}
 
 Citizen.CreateThread(function()
     while true do
-        local Sleep = 2000
         local PlayerPed = PlayerPedId() 
         local PlayerCoord = GetEntityCoords(PlayerPed)
 
         for Motel = 1, #KIBRA.Motels, 1 do
-            for RoomNo = 1, #KIBRA.Motels[Motel].MotelRooms, 1 do
-                local MotelDistance = #(PlayerCoord - KIBRA.Motels[Motel].ReceptionCoord)
-                local MotelDoor = GetClosestObjectOfType(KIBRA.Motels[Motel].MotelRooms[RoomNo].DoorCoord.x, KIBRA.Motels[Motel].MotelRooms[RoomNo].DoorCoord.y, KIBRA.Motels[Motel].MotelRooms[RoomNo].DoorCoord.z, 1.0, KIBRA.Motels[Motel].DoorHash, false)
-                if MotelDistance < 100 then
+            local MotelDistance = GetDistanceBetweenCoords(PlayerCoord, KIBRA.Motels[Motel].ReceptionCoord, false)
+            if MotelDistance <= 95.0 then
+                for RoomNo = 1, #KIBRA.Motels[Motel].MotelRooms, 1 do
+                    local MotelDoor = GetClosestObjectOfType(KIBRA.Motels[Motel].MotelRooms[RoomNo].DoorCoord.x, KIBRA.Motels[Motel].MotelRooms[RoomNo].DoorCoord.y, KIBRA.Motels[Motel].MotelRooms[RoomNo].DoorCoord.z, 1.2, KIBRA.Motels[Motel].DoorHash, false, false, false)
                     if DoesEntityExist(MotelDoor) then
                         if KIBRA.Motels[Motel].MotelRooms[RoomNo].DoorLock then
                             SetEntityHeading(MotelDoor, KIBRA.Motels[Motel].MotelRooms[RoomNo].DoorHeading)
                         end
                     end
                     FreezeEntityPosition(MotelDoor, KIBRA.Motels[Motel].MotelRooms[RoomNo].DoorLock)
-                    Citizen.Wait(0)
+                    Citizen.Wait(1)
                 end
-                Citizen.Wait(100)
+            end
+            Citizen.Wait(100)
+        end
+    end
+end)
+
+Citizen.CreateThread(function()
+    while true do
+        local Sleep = 2000
+        local PlayerCoord = GetEntityCoords(PlayerPedId()) 
+        for i = 1, #KIBRA.Elevator, 1 do
+            for Elevator = 1, #KIBRA.Elevator[i] do
+                local ElevatorDist = #(PlayerCoord - KIBRA.Elevator[i][Elevator].Coord)
+                if ElevatorDist <= 3 then
+                    Sleep = 5
+                    QBCore.Functions.DrawText3D(KIBRA.Elevator[i][Elevator].Coord.x, KIBRA.Elevator[i][Elevator].Coord.y, KIBRA.Elevator[i][Elevator].Coord.z, '~g~[E] - ~w~ Asansör')
+                    if IsControlJustReleased(0, 38) then
+                        ElevatorMenu(i)
+                    end
+                end
             end
         end
-
         Citizen.Wait(Sleep)
     end
 end)
+
+function ElevatorMenu(x)
+        local elements = {}
+        for i = 1, #KIBRA.Elevator[x] do
+        table.insert(elements, {label = KIBRA.Elevator[x][i].Text, value = KIBRA.Elevator[x][i].Coord})
+        end
+        QBCore.UI.Menu.CloseAll()
+        QBCore.UI.Menu.Open('default', GetCurrentResourceName(), 'KibraDevWorks', {
+            title    = "Asansör",
+            align    = 'top-left',
+            elements = elements
+        }, function(data, menu)
+            Teleport(data.current.value)
+        end, function(data, menu)
+            menu.close()
+        end)
+end
+
+function Teleport(Coord)
+    local PlayerPed = PlayerPedId()
+    SetEntityCoords(PlayerPed, Coord.x, Coord.y, Coord.z, true)
+end
 
 RegisterNetEvent('kibra-motels:client:ShowMotelBlips', function()
     if not MotelsBlip then
@@ -43,6 +84,8 @@ RegisterNetEvent('kibra-motels:client:ShowMotelBlips', function()
         QBCore.Functions.Notify('Motel bliplerini kapattınız!', 'error')
     end
 end)
+
+
 
 RegisterCommand('blip', function()
     TriggerEvent('kibra-motels:client:ShowMotelBlips')
@@ -123,26 +166,47 @@ Citizen.CreateThread(function()
                 local DoorDistance = #(PlayerCoord - KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord)
                 local StashDistance = #(PlayerCoord - KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord)
                 local WardrobeDistance = #(PlayerCoord - KIBRA.Motels[Motel].MotelRooms[MotelRoom].Wardrobe)
+                if not KIBRA.ResmonOptimize then
+                    if DoorDistance < 4.5 then
+                        Sleep = 5
+                        DrawMarker(2, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.z - 0.3, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 32, 236, 54, 100, 0, 0, 0, 1, 0, 0, 0)
+                        QBCore.Functions.DrawText3D(KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.z, '~w~Oda Numara: ~g~['..MotelRoom..']')
+                    end
 
-                if DoorDistance < 2 then
-                    Sleep = 5
-                    DrawMarker(2, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.z - 0.3, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 32, 236, 54, 100, 0, 0, 0, 1, 0, 0, 0)
-                    QBCore.Functions.DrawText3D(KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord.z, '~w~Oda Numara: ~g~['..MotelRoom..']')
-                end
-
-                if StashDistance < 2 then
-                    Sleep = 5
-                    DrawMarker(2, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.z - 0.3, 0, 0, 0, 0, 0, 0, 0.3, 0.3, 0.3, 32, 236, 54, 100, 0, 0, 0, 1, 0, 0, 0)
-                    if KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashLock then
-                        Sleep = 5 
-                        QBCore.Functions.DrawText3D(KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.z, 'Kilitli')
-                    else
-                        Sleep = 5 
-                        QBCore.Functions.DrawText3D(KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.z, '~g~[E]~w~ - Depo')
-                        if IsControlJustReleased(0, 38) then
-                            TriggerServerEvent("inventory:server:OpenInventory", "stash", "Motel_"..Motel..'_'..MotelRoom)
-                            TriggerEvent("inventory:client:SetCurrentStash", "Motel_"..Motel..'_'..MotelRoom)
+                    if StashDistance < 2 then
+                        Sleep = 5
+                        DrawMarker(2, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.z - 0.3, 0, 0, 0, 0, 0, 0, 0.3, 0.3, 0.3, 32, 236, 54, 100, 0, 0, 0, 1, 0, 0, 0)
+                        if KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashLock then
+                            Sleep = 5 
+                            QBCore.Functions.DrawText3D(KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.z, 'Kilitli')
+                        else
+                            Sleep = 5 
+                            QBCore.Functions.DrawText3D(KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord.z, '~g~[E]~w~ - Depo')
+                            if IsControlJustReleased(0, 38) then
+                                TriggerServerEvent("inventory:server:OpenInventory", "stash", "Motel_"..Motel..'_'..MotelRoom)
+                                TriggerEvent("inventory:client:SetCurrentStash", "Motel_"..Motel..'_'..MotelRoom)
+                            end
                         end
+                    end
+                else
+                    if StashDistance < 2 then
+                        if not KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashLock then
+                            Sleep = 5 
+                            if IsControlJustReleased(0, 38) then
+                                TriggerServerEvent("inventory:server:OpenInventory", "stash", "Motel_"..Motel..'_'..MotelRoom)
+                                TriggerEvent("inventory:client:SetCurrentStash", "Motel_"..Motel..'_'..MotelRoom)
+                            end
+                        end
+                    end
+                end
+                
+                if WardrobeDistance < 1.5 then
+                    Sleep = 5
+                    DrawMarker(2, KIBRA.Motels[Motel].MotelRooms[MotelRoom].Wardrobe.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].Wardrobe.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].Wardrobe.z - 0.3, 0, 0, 0, 0, 0, 0, 0.3, 0.3, 0.3, 32, 236, 54, 100, 0, 0, 0, 1, 0, 0, 0)
+                    QBCore.Functions.DrawText3D(KIBRA.Motels[Motel].MotelRooms[MotelRoom].Wardrobe.x, KIBRA.Motels[Motel].MotelRooms[MotelRoom].Wardrobe.y, KIBRA.Motels[Motel].MotelRooms[MotelRoom].Wardrobe.z, '~g~[E]~w~ - Dolap')
+                    if IsControlJustReleased(0, 38) then
+                        TriggerServerEvent("InteractSound_SV:PlayOnSource", "Clothes1", 0.4)
+                        TriggerEvent('qb-clothing:client:openOutfitMenu')
                     end
                 end
             end
@@ -162,16 +226,17 @@ function MotelKeyUse(x,y)
             local MotelDoor = #(PlayerCoord - KIBRA.Motels[Motel].MotelRooms[MotelRoom].DoorCoord)
             local MotelStash = #(PlayerCoord - KIBRA.Motels[Motel].MotelRooms[MotelRoom].StashCoord)
             local MotelKeyData = KIBRA.Motels[Motel].MotelRooms[MotelRoom].KeyInfo 
+            local MotelRoomInfo = Motel..'_'..MotelRoom
             if MotelDoor <= 1.5 then
-                local MotelRoomId = tostring(x) 
+
                 if KIBRA.MotelKeyData then
-                    if MotelRoomId == MotelRoom and MotelKeyData == y then
+                    if MotelKeyData == y then
                         QBCore.Functions.Notify('Doğru')
                     else
                         QBCore.Functions.Notify('Yanlış')
                     end
                 else
-                    if MotelRoom == x then
+                    if Motel..'_'..MotelRoom == x then
                         MotelDoorLock(Motel, MotelRoom)
                     else
                         QBCore.Functions.Notify('Bu anahtar bu kapıya ait değil!', 'error')
@@ -180,12 +245,13 @@ function MotelKeyUse(x,y)
             end
 
             if MotelStash <= 1.5 then
-                if MotelRoom == x then
+                if Motel..'_'..MotelRoom == x then
                     MotelStashLock(Motel, MotelRoom)
                 else
                     QBCore.Functions.Notify('Bu anahtar bu depoya ait değil!', 'error')
                 end
             end
+
         end
     end
 end
@@ -267,7 +333,6 @@ function MotelMenu(Motel)
                 if isOwnMotel then
                     local elements = {
                         {label = "Motel Oda No: "..v.room_no},
-                        {label = "Depo Kilidi Satın Al", value = "depolockbuy"},
                         {label = "Motel Odasını İptal Et", value = 'motelleave'},
                         {label = "Yedek Anahtar Çıkar", value = 'copykey'},
                     }
@@ -283,9 +348,6 @@ function MotelMenu(Motel)
                         elseif data.current.value == 'copykey' then
                             TriggerEvent('kibra-motels:client:CopyKey')
                             QBCore.UI.Menu.CloseAll()
-                        elseif data.current.value == "depolockbuy" then 
-                            TriggerEvent('kibra-motels:client:StashLockBuy')
-                            QBCore.UI.Menu.CloseAll()
                         end
                     end, function(data, menu)
                         menu.close()
@@ -298,36 +360,37 @@ function MotelMenu(Motel)
     end)
 end 
 
-RegisterNetEvent('kibra-motels:client:StashLockBuy', function()
-    if KIBRA.StashLockSystem then
-        TriggerServerEvent('kibra-motels:server:DepoLockBuy')
-    else
-        QBCore.Functions.Notify('Bu özellik kullanılabilir değil!', 'error')
-    end
-end)
-
 function RecepsiyonMenu(Motel)
     local elements = {}
-    for MotelRoom = 1, #KIBRA.Motels[Motel].MotelRooms, 1 do
-        table.insert(elements, { label = "Motel Odası - "..MotelRoom..' - $'..KIBRA.Motels[Motel].MotelPrice..' - '..(KIBRA.Motels[Motel].MotelRooms[MotelRoom].Owner == nil and "Oda Boş" or "Dolu"), value= (KIBRA.Motels[Motel].MotelRooms[MotelRoom].Owner == nil and MotelRoom or 'notFree')})
+    for MotelRoom = 1, #KIBRA.Motels[Motel].MotelRooms do
+        table.insert(elements, { label = "Motel Odası - "..MotelRoom..' - '..KIBRA.Motels[Motel].MotelPrice..'$', value = (KIBRA.Motels[Motel].MotelRooms[MotelRoom].Owner == nil and Motel .. '_' .. MotelRoom or 'notFree')})
         QBCore.UI.Menu.CloseAll()
         QBCore.UI.Menu.Open('default', GetCurrentResourceName(), 'KibraDevWorks', {
             title    = KIBRA.Motels[Motel].MotelName,
             align    = 'top-left',
             elements = elements
         }, function(data, menu)
-        --    QBCore.Functions.TriggerCallback('kibra-motels:server:MotelCheck', function(MotelIsOwn)
-        --        if not MotelIsOwn then
+            QBCore.Functions.TriggerCallback('kibra-motels:server:MotelCheck', function(MotelIsOwn)
+                if not KIBRA.MultiMotel then
+                    if not MotelIsOwn then
+                        if KIBRA.Motels[Motel].MotelRooms[MotelRoom].Owner == nil then
+                            TriggerServerEvent('kibra-motels:server:BuyMotel', data.current.value, KIBRA.Motels[Motel].MotelPrice, Motel)
+                            QBCore.UI.Menu.CloseAll()
+                        else
+                            QBCore.Functions.Notify('Satın almaya çalıştığınız oda, başka biri tarafından kiralandı!', 'error')
+                        end
+                    else
+                        QBCore.Functions.Notify('Kiralamış olduğunuz bir motel odası zaten var!', 'error')
+                    end
+                else
                     if KIBRA.Motels[Motel].MotelRooms[MotelRoom].Owner == nil then
                         TriggerServerEvent('kibra-motels:server:BuyMotel', data.current.value, KIBRA.Motels[Motel].MotelPrice, Motel)
                         QBCore.UI.Menu.CloseAll()
                     else
                         QBCore.Functions.Notify('Satın almaya çalıştığınız oda, başka biri tarafından kiralandı!', 'error')
                     end
-        --        else
-        --            QBCore.Functions.Notify('Kiralamış olduğunuz bir otel odası zaten var!', 'error')
-        --        end
-        --    end)
+                end
+            end)
             QBCore.UI.Menu.CloseAll()
         end, function(data, menu)
             menu.close()
