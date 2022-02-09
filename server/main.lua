@@ -191,13 +191,6 @@ function MotelBilling()
                 if KIBRA.Motels[MotelPlayerInfo["motelid"]].MotelRentPayment then
                     TriggerEvent('esx_billing:sendBillAmaOffline', PlayerCitizenId.PlayerData.citizenid, KIBRA.Motels[MotelPlayerInfo["motelid"]].MotelName, "Motel Kirası", KIBRA.Motels[MotelPlayerInfo["motelid"]].MotelRentPrice)
                 end
-                if KIBRA.MailBilling then
-                    TriggerEvent('qb-phone:server:sendNewMailToOffline', PlayerCitizenId.PlayerData.citizenid, {
-                        sender = KIBRA.Motels[MotelPlayerInfo["motelid"]].MotelName,
-                        subject = "Motel Yönetimi",
-                        message = "Merhaba "..PlayerCitizenId.PlayerData.charinfo.firstname..' '..PlayerCitizenId.PlayerData.charinfo.lastname..' Otelimiz tarafından oda kirası fatura olarak bankanıza yansıtılmıştır. Geciktirmemeniz dileğiyle :)'
-                    })
-                end
              end
         end
     end)
